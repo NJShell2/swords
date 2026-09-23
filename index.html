@@ -497,7 +497,7 @@
       return r.json();
     }).then(function(j){
       var n=((j&&j.data)||[]).length;
-      var hasNkjv=((j&&j.data)||[]).some(function(b){return (b.abbreviation||")==="NKJV";});
+      var hasNkjv=((j&&j.data)||[]).some(function(b){return (b.abbreviation||"")==="NKJV";});
       $("keyStatus").textContent="Key works ("+n+" Bibles)"+(hasNkjv?" — NKJV licensed ✓":" — but NKJV is not on this key");
     }).catch(function(e){ $("keyStatus").textContent="Test failed: "+e.message; });
   });
