@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swords — a Bible memory game</title>
+<meta name="description" content="Swords: a Bible verse memory game. Recite the verse, flip the card, score the round. NKJV.">
+<style>
+  :root{
+    --ink:#2b2118;
+    --gold:#b8860b;
+    --gold-soft:#e8d5a3;
+    --cream:#fdf8ee;
+    --night:#1c2b4a;
+    --green:#2e7d4f;
+    --amber:#b8860b;
+    --red:#a33b3b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:Georgia,'Times New Roman',serif;
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;
+    background:radial-gradient(1200px 600px at 50% -10%, #2a3d66 0%, var(--night) 55%, #141d33 100%);
+    padding:24px 16px 40px;
+  }
+  .wrap{width:100%;max-width:720px;display:flex;flex-direction:column;align-items:center}
+  header{text-align:center;color:var(--cream);margin:20px 0 4px}
+  header .rule{color:var(--gold-soft);letter-spacing:4px;font-size:13px;text-transform:uppercase}
+  header h1{font-size:clamp(36px,7vw,56px);font-weight:normal;margin:10px 0 6px}
+  header h1 .sw{color:var(--gold-soft)}
+  header p{font-style:italic;opacity:.85;max-width:56ch;line-height:1.5}
+  .screen{width:100%;display:none;flex-direction:column;align-items:center}
+  .screen.on{display:flex}
+
+  /* ---------- setup ---------- */
+  .panel{
+    background:var(--cream);border-radius:14px;
+    box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 0 0 1px var(--gold-soft);
+    padding:clamp(24px,5vw,40px);margin-top:22px;width:100%;
+  }
+  .panel h2{font-weight:normal;font-size:24px;margin-bottom:6px;text-align:center}
+  .panel .sub{text-align:center;font-style:italic;color:#5a4a33;margin-bottom:22px;font-size:15px}
+  .field{margin:16px 0}
+  .field label{display:block;font-family:Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+  .stepper{display:flex;align-items:center;justify-content:center;gap:18px}
+  .stepper button{width:52px;height:52px;font-size:26px;border-radius:50%;padding:0;line-height:1}
+  .stepper .n{font-size:40px;min-width:60px;text-align:center;font-variant-numeric:tabular-nums}
+  .names{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .names input{
+    font-family:Georgia,serif;font-size:16px;padding:10px 12px;border:1px solid #cbb98a;border-radius:8px;background:#fffdf7;color:var(--ink);width:100%;
+  }
+  .names input::placeholder{color:#a8946a;font-style:italic}
+  select{
+    font-family:Georgia,serif;font-size:16px;padding:10px 12px;border:1px solid #cbb98a;border-radius:8px;background:#fffdf7;color:var(--ink);width:100%;
+  }
+  .seg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .seg button{background:transparent;color:var(--gold);border:1px solid var(--gold)}
+  .seg button.sel{background:var(--gold);color:#fff}
+  button{
+    font-family:Arial,Helvetica,sans-serif;font-size:15px;letter-spacing:.5px;
+    padding:12px 22px;border-radius:8px;border:1px solid var(--gold);
+    background:var(--gold);color:#fff;cursor:pointer;transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent;color:var(--gold)}
+  button.ghost:hover{background:rgba(184,134,11,.08)}
+  button.big{font-size:18px;padding:14px 34px;margin-top:10px}
+  button:disabled{opacity:.45;cursor:default;filter:none}
+  .gear{
+    position:absolute;top:18px;right:18px;background:transparent;border:none;color:var(--gold-soft);
+    font-size:24px;padding:8px;cursor:pointer;
+  }
+
+  /* ---------- game ---------- */
+  .scorebar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:14px 0 4px;width:100%}
+  .chip{
+    font-family:Arial,Helvetica,sans-serif;font-size:13px;color:var(--cream);
+    border:1px solid rgba(232,213,163,.4);border-radius:20px;padding:6px 12px;
+    display:flex;gap:8px;align-items:center;transition:all .2s;
+  }
+  .chip b{font-variant-numeric:tabular-nums}
+  .chip.active{background:var(--gold);border-color:var(--gold);color:#fff;transform:scale(1.08)}
+  .progress{color:#9aa3bd;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;letter-spacing:2px;text-transform:uppercase;margin:8px 0 2px}
+  .turnnote{color:var(--gold-soft);font-style:italic;margin:6px 0 0;text-align:center;font-size:16px}
+
+  .cardscene{width:100%;max-width:560px;perspective:1200px;margin-top:14px;cursor:pointer}
+  .card3d{position:relative;width:100%;min-height:340px;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.2,.7,.3,1.2)}
+  .card3d.flipped{transform:rotateY(180deg)}
+  .face{
+    position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    background:var(--cream);border-radius:14px;
+    box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 0 0 1px var(--gold-soft);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:clamp(28px,6vw,48px);text-align:center;
+  }
+  .face.back{transform:rotateY(180deg)}
+  .face .kicker{font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+  .face .bigref{font-size:clamp(34px,8vw,54px);line-height:1.2}
+  .face .hint{margin-top:18px;font-style:italic;color:#8a744f;font-size:14.5px}
+  .face .vtext{font-size:clamp(19px,4vw,26px);line-height:1.6}
+  .face .vref{margin-top:16px;font-size:17px;font-style:italic;color:#5a4a33}
+  .face .vref strong{font-style:normal;color:var(--ink)}
+  .tapflip{color:#9aa3bd;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:10px}
+
+  .scorepanel{width:100%;max-width:560px;margin-top:16px;display:none;flex-direction:column;align-items:center;gap:10px}
+  .scorepanel.on{display:flex}
+  .scorepanel .q{color:var(--cream);font-style:italic;font-size:16px}
+  .sbtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .sbtns button{min-width:130px}
+  button.good{background:var(--green);border-color:var(--green)}
+  button.close{background:var(--amber);border-color:var(--amber)}
+  button.miss{background:var(--red);border-color:var(--red)}
+  .keys{color:#8d94a8;font-family:Arial,Helvetica,sans-serif;font-size:12px;margin-top:8px;text-align:center}
+
+  /* ---------- results ---------- */
+  .results{list-style:none;width:100%;margin:10px 0 6px}
+  .results li{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 18px;border-bottom:1px solid var(--gold-soft);font-size:19px;
+  }
+  .results li.winner{background:rgba(184,134,11,.12);border-radius:8px;font-size:22px}
+  .results .pts{font-variant-numeric:tabular-nums;color:#5a4a33}
+  .crown{margin-right:8px}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+
+  /* ---------- settings modal ---------- */
+  .modal{position:fixed;inset:0;background:rgba(10,14,28,.7);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+  .modal.on{display:flex}
+  .modal .panel{max-width:520px;margin-top:0;position:relative}
+  .modal input[type=password],.modal input[type=text]{
+    font-family:Arial,Helvetica,sans-serif;font-size:15px;padding:10px 12px;border:1px solid #cbb98a;border-radius:8px;background:#fffdf7;color:var(--ink);width:100%;
+  }
+  .modal .status{font-size:14px;margin-top:10px;min-height:20px;font-style:italic;color:#5a4a33}
+  .modal .x{position:absolute;top:10px;right:14px;background:none;border:none;color:#8a744f;font-size:22px;padding:6px}
+
+  footer{color:#8d94a8;margin-top:26px;font-size:12px;text-align:center;font-family:Arial,Helvetica,sans-serif;max-width:64ch;line-height:1.7}
+  .flash{position:fixed;top:22px;left:50%;transform:translateX(-50%);background:var(--gold);color:#fff;
+    font-family:Arial,Helvetica,sans-serif;font-size:17px;padding:12px 26px;border-radius:30px;
+    opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
+  .flash.on{opacity:1}
+  @media (max-width:480px){ .names{grid-template-columns:1fr} .card3d{min-height:300px} }
+</style>
+</head>
+<body>
+<button class="gear" id="gearBtn" title="Settings" aria-label="Settings">⚙</button>
+<div class="wrap">
+  <header>
+    <div class="rule">✦ &nbsp;A Bible memory game&nbsp; ✦</div>
+    <h1><span class="sw">⚔</span> Swords <span class="sw">⚔</span></h1>
+    <p>Recite the verse from memory, or look it up in your Bible — then flip the card to check. New King James Version.</p>
+  </header>
+
+  <!-- SETUP -->
+  <section class="screen on" id="setupScreen">
+    <div class="panel">
+      <h2>Set up the match</h2>
+      <p class="sub">Takes ten seconds. Names are optional.</p>
+      <div class="field">
+        <label>Players</label>
+        <div class="stepper">
+          <button type="button" id="pMinus" aria-label="Fewer players">−</button>
+          <div class="n" id="pCount">2</div>
+          <button type="button" id="pPlus" aria-label="More players">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Names <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+        <div class="names" id="nameFields"></div>
+      </div>
+      <div class="field">
+        <label>Cards per player</label>
+        <div class="seg" id="roundSeg">
+          <button type="button" data-r="3">3</button>
+          <button type="button" data-r="5" class="sel">5</button>
+          <button type="button" data-r="8">8</button>
+          <button type="button" data-r="10">10</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Theme</label>
+        <select id="themeSel"><option value="">All themes</option></select>
+      </div>
+      <div style="text-align:center">
+        <button type="button" class="big" id="startBtn">Start match</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section class="screen" id="gameScreen">
+    <div class="scorebar" id="scorebar"></div>
+    <div class="progress" id="progress"></div>
+    <div class="turnnote" id="turnnote"></div>
+    <div class="cardscene" id="cardscene" role="button" tabindex="0" aria-label="Flip card">
+      <div class="card3d" id="card3d">
+        <div class="face front">
+          <div class="kicker">Recite it…</div>
+          <div class="bigref" id="cardRef"></div>
+          <div class="hint">Say it from memory, or find it in your Bible —<br>then flip the card to check.</div>
+        </div>
+        <div class="face back">
+          <div class="kicker">New King James Version</div>
+          <p class="vtext" id="cardText"></p>
+          <p class="vref" id="cardVerseRef"></p>
+        </div>
+      </div>
+    </div>
+    <div class="tapflip" id="tapflip">tap the card or press space to flip</div>
+    <div class="scorepanel" id="scorepanel">
+      <div class="q" id="scoreQ"></div>
+      <div class="sbtns">
+        <button type="button" class="good" id="btnGood">Nailed it · +10</button>
+        <button type="button" class="close" id="btnClose">Close · +5</button>
+        <button type="button" class="miss" id="btnMiss">Miss · +0</button>
+      </div>
+      <button type="button" class="ghost" id="skipBtn">Skip card · no points</button>
+    </div>
+    <div class="keys">space = flip · 1 = +10 · 2 = +5 · 3 = +0</div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="resultsScreen">
+    <div class="panel">
+      <h2 id="winnerLine"></h2>
+      <p class="sub" id="resultsSub"></p>
+      <ul class="results" id="resultsList"></ul>
+      <div class="btnrow">
+        <button type="button" id="againBtn">Rematch</button>
+        <button type="button" class="ghost" id="newBtn">New setup</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Verse text: New King James Version®. Copyright © 1982 by Thomas Nelson. Used by permission. All rights reserved.<br>
+    Text served by the licensed API.Bible feed · Companion to the Verse Clock and Birthday Verse sites
+  </footer>
+</div>
+
+<!-- SETTINGS -->
+<div class="modal" id="settingsModal">
+  <div class="panel">
+    <button class="x" id="settingsX" aria-label="Close">×</button>
+    <h2>Verse text source</h2>
+    <p class="sub">Swords reads NKJV text from the licensed API.Bible feed. Paste a free API key once and the game remembers it.</p>
+    <div class="field">
+      <label>API.Bible key</label>
+      <input type="password" id="keyInput" placeholder="paste your key here" autocomplete="off">
+    </div>
+    <div class="btnrow">
+      <button type="button" id="saveKeyBtn">Save &amp; connect</button>
+      <button type="button" class="ghost" id="testKeyBtn">Test</button>
+    </div>
+    <div class="status" id="keyStatus"></div>
+    <p class="sub" style="margin-top:14px">No key yet? Grab a free one at <b>api.bible</b> (sign up, then copy the token). Without a key the game still runs — the flip side will ask for one.</p>
+  </div>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<script src="swords-verses.js"></script>
+<script>
+(function(){
+  "use strict";
+  var VERSES = window.SWORDS_VERSES || [];
+  var API_BASE = "https://rest.api.bible";
+  var LS_KEY = "swords_api_key", LS_BIBLE = "swords_bible_id", LS_CACHE = "swords_cache_v1";
+
+  /* ---------- tiny helpers ---------- */
+  function $(id){ return document.getElementById(id); }
+  function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
+  function show(id){ ["setupScreen","gameScreen","resultsScreen"].forEach(function(s){ $(s).classList.toggle("on", s===id); }); }
+  var flashT=null;
+  function flash(msg){ var f=$("flash"); f.textContent=msg; f.classList.add("on"); clearTimeout(flashT); flashT=setTimeout(function(){f.classList.remove("on");},1200); }
+
+  /* ---------- setup state ---------- */
+  var playerCount=2, cardsPerPlayer=5;
+  function renderNames(){
+    var box=$("nameFields"); box.innerHTML="";
+    for(var i=1;i<=playerCount;i++){
+      var inp=document.createElement("input");
+      inp.type="text"; inp.placeholder="Player "+i+" (optional)"; inp.id="nm"+i; inp.maxLength=16;
+      box.appendChild(inp);
+    }
+  }
+  $("pMinus").addEventListener("click",function(){ if(playerCount>1){playerCount--; $("pCount").textContent=playerCount; renderNames();} });
+  $("pPlus").addEventListener("click",function(){ if(playerCount<8){playerCount++; $("pCount").textContent=playerCount; renderNames();} });
+  $("roundSeg").addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    cardsPerPlayer=parseInt(b.dataset.r,10);
+    Array.prototype.forEach.call($("roundSeg").children,function(x){x.classList.toggle("sel",x===b);});
+  });
+  var themes=[...new Set(VERSES.map(function(v){return v.t;}))].sort();
+  themes.forEach(function(t){ var o=document.createElement("option"); o.value=t; o.textContent=t; $("themeSel").appendChild(o); });
+  renderNames();
+
+  /* ---------- API.Bible ---------- */
+  function getKey(){ return localStorage.getItem(LS_KEY)||""; }
+  function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_CACHE)||"{}"); }catch(e){ return {}; } }
+  function setCache(c){ try{ localStorage.setItem(LS_CACHE, JSON.stringify(c)); }catch(e){} }
+  function stripHtml(html){
+    var d=document.createElement("div"); d.innerHTML=html;
+    return (d.textContent||"").replace(/\s+/g," ").trim();
+  }
+  function apiFetch(path){
+    return fetch(API_BASE+path,{headers:{"api-key":getKey()}}).then(function(r){
+      if(!r.ok) throw new Error("API "+r.status);
+      return r.json();
+    });
+  }
+  function ensureBibleId(){
+    var id=localStorage.getItem(LS_BIBLE);
+    if(id) return Promise.resolve(id);
+    return apiFetch("/v1/bibles?language=eng").then(function(j){
+      var list=(j&&j.data)||[];
+      var hit=list.find(function(b){return (b.abbreviation||"")==="NKJV";})
+             || list.find(function(b){return /new king james/i.test(b.name||"");});
+      if(!hit) throw new Error("NKJV not licensed on this key");
+      localStorage.setItem(LS_BIBLE, hit.id);
+      return hit.id;
+    });
+  }
+  function fetchVerseText(v){
+    var cache=getCache();
+    if(cache[v.id]) return Promise.resolve(cache[v.id]);
+    if(!getKey()) return Promise.reject(new Error("nokey"));
+    return ensureBibleId().then(function(bid){
+      return apiFetch("/v1/bibles/"+bid+"/verses/"+v.id+"?content-type=text");
+    }).then(function(j){
+      var txt=stripHtml((j&&j.data&&j.data.content)||"");
+      if(!txt) throw new Error("empty");
+      cache[v.id]=txt; setCache(cache);
+      return txt;
+    });
+  }
+
+  /* ---------- game state ---------- */
+  var players=[], deck=[], idx=0, flipped=false, totalCards=0;
+
+  function playerName(i){ return players[i].name || ("Player "+(i+1)); }
+
+  function renderScorebar(active){
+    var bar=$("scorebar"); bar.innerHTML="";
+    players.forEach(function(p,i){
+      var c=document.createElement("div");
+      c.className="chip"+(i===active?" active":"");
+      c.innerHTML="<span></span><b></b>";
+      c.firstChild.textContent=playerName(i);
+      c.lastChild.textContent=p.score;
+      bar.appendChild(c);
+    });
+  }
+
+  function currentPlayer(){ return idx % players.length; }
+
+  function dealCard(){
+    flipped=false;
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    var v=deck[idx];
+    $("card3d").classList.remove("flipped");
+    $("scorepanel").classList.remove("on");
+    $("tapflip").style.visibility="visible";
+    $("cardRef").textContent=v.r;
+    $("cardText").textContent="Loading NKJV text…";
+    $("cardVerseRef").innerHTML="";
+    var cp=currentPlayer();
+    renderScorebar(cp);
+    $("progress").textContent="Card "+(idx+1)+" of "+totalCards;
+    $("turnnote").textContent=playerName(cp)+" — recite it, then flip.";
+    // prefetch this card + the next one
+    fetchVerseText(v).then(function(t){
+      if(deck[idx]===v){ $("cardText").textContent=t; $("cardVerseRef").innerHTML="<strong>"+v.r+"</strong> · NKJV"; }
+    }).catch(function(e){
+      if(deck[idx]!==v) return;
+      if(e.message==="nokey"){
+        $("cardText").textContent="Add your free API.Bible key in Settings (⚙) to reveal the NKJV text.";
+      } else {
+        $("cardText").textContent="Could not load the verse text. Check the API key in Settings (⚙).";
+      }
+      $("cardVerseRef").innerHTML="<strong>"+v.r+"</strong>";
+    });
+    if(idx+1<deck.length){ fetchVerseText(deck[idx+1]).catch(function(){}); }
+  }
+
+  function flip(){
+    if(flipped) return;
+    flipped=true;
+    $("card3d").classList.add("flipped");
+    $("tapflip").style.visibility="hidden";
+    var v=deck[idx], cp=currentPlayer();
+    $("scoreQ").textContent="How did "+playerName(cp)+" do on "+v.r+"?";
+    $("scorepanel").classList.add("on");
+  }
+
+  function award(pts){
+    if(!flipped) return;
+    var cp=currentPlayer();
+    players[cp].score+=pts;
+    flash(playerName(cp)+" +"+pts);
+    idx++;
+    if(idx>=deck.length){ setTimeout(showResults,700); }
+    else { setTimeout(dealCard,450); }
+  }
+
+  $("cardscene").addEventListener("click",flip);
+  $("cardscene").addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } });
+  $("btnGood").addEventListener("click",function(){award(10);});
+  $("btnClose").addEventListener("click",function(){award(5);});
+  $("btnMiss").addEventListener("click",function(){award(0);});
+  $("skipBtn").addEventListener("click",function(){
+    if(!flipped) return;
+    idx++;
+    if(idx>=deck.length) showResults(); else dealCard();
+  });
+  document.addEventListener("keydown",function(e){
+    if(!$("gameScreen").classList.contains("on")) return;
+    if($("settingsModal").classList.contains("on")) return;
+    if(e.key===" "){ e.preventDefault(); flip(); }
+    else if(e.key==="1"){ award(10); }
+    else if(e.key==="2"){ award(5); }
+    else if(e.key==="3"){ award(0); }
+  });
+
+  function showResults(){
+    var order=players.map(function(p,i){return {i:i,name:playerName(i),score:p.score};})
+                     .sort(function(a,b){return b.score-a.score;});
+    var top=order[0].score, winners=order.filter(function(o){return o.score===top;});
+    $("winnerLine").textContent = winners.length>1
+      ? "It's a tie!"
+      : "🏆 "+winners[0].name+" wins!";
+    $("resultsSub").textContent = totalCards+" cards · "+players.length+(players.length===1?" player":" players");
+    var ul=$("resultsList"); ul.innerHTML="";
+    order.forEach(function(o,k){
+      var li=document.createElement("li");
+      if(k===0 && winners.length===1) li.className="winner";
+      li.innerHTML='<span><span class="crown">'+(k===0?"👑 ":"")+'</span><span></span></span><span class="pts"></span>';
+      li.querySelector("span span:last-child").textContent=o.name;
+      li.querySelector(".pts").textContent=o.score+" pts";
+      ul.appendChild(li);
+    });
+    show("resultsScreen");
+  }
+
+  $("againBtn").addEventListener("click",function(){
+    players.forEach(function(p){p.score=0;});
+    deck=shuffle(deck.slice()); idx=0; totalCards=deck.length;
+    show("gameScreen"); dealCard();
+  });
+  $("newBtn").addEventListener("click",function(){ show("setupScreen"); });
+
+  $("startBtn").addEventListener("click",function(){
+    players=[];
+    for(var i=1;i<=playerCount;i++){
+      var nm=($("nm"+i)&&$("nm"+i).value||"").trim();
+      players.push({name:nm,score:0});
+    }
+    var theme=$("themeSel").value;
+    var pool=VERSES.filter(function(v){return !theme||v.t===theme;});
+    if(!pool.length){ flash("No verses in that theme."); return; }
+    totalCards=Math.min(cardsPerPlayer*players.length, pool.length);
+    deck=shuffle(pool.slice()).slice(0,totalCards);
+    idx=0;
+    show("gameScreen");
+    dealCard();
+  });
+
+  /* ---------- settings ---------- */
+  function openSettings(){
+    $("keyInput").value=getKey();
+    $("keyStatus").textContent=getKey()?"Key saved.":"No key saved yet.";
+    $("settingsModal").classList.add("on");
+  }
+  $("gearBtn").addEventListener("click",openSettings);
+  $("settingsX").addEventListener("click",function(){$("settingsModal").classList.remove("on");});
+  $("settingsModal").addEventListener("click",function(e){ if(e.target===$("settingsModal")) $("settingsModal").classList.remove("on"); });
+  $("saveKeyBtn").addEventListener("click",function(){
+    var k=$("keyInput").value.trim();
+    if(!k){ $("keyStatus").textContent="Paste a key first."; return; }
+    localStorage.setItem(LS_KEY,k);
+    localStorage.removeItem(LS_BIBLE);
+    $("keyStatus").textContent="Connecting…";
+    ensureBibleId().then(function(){
+      $("keyStatus").textContent="Connected — NKJV unlocked.";
+      try{ localStorage.removeItem(LS_CACHE); }catch(e){}
+    }).catch(function(e){
+      $("keyStatus").textContent="Could not connect: "+e.message;
+    });
+  });
+  $("testKeyBtn").addEventListener("click",function(){
+    var k=$("keyInput").value.trim()||getKey();
+    if(!k){ $("keyStatus").textContent="Paste a key first."; return; }
+    $("keyStatus").textContent="Testing…";
+    fetch(API_BASE+"/v1/bibles?language=eng",{headers:{"api-key":k}}).then(function(r){
+      if(!r.ok) throw new Error("API "+r.status+" — check the key");
+      return r.json();
+    }).then(function(j){
+      var n=((j&&j.data)||[]).length;
+      var hasNkjv=((j&&j.data)||[]).some(function(b){return (b.abbreviation||")==="NKJV";});
+      $("keyStatus").textContent="Key works ("+n+" Bibles)"+(hasNkjv?" — NKJV licensed ✓":" — but NKJV is not on this key");
+    }).catch(function(e){ $("keyStatus").textContent="Test failed: "+e.message; });
+  });
+})();
+</script>
+</body>
+</html>
