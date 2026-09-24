@@ -149,7 +149,7 @@
   <header>
     <div class="rule">✦ &nbsp;A Bible memory game&nbsp; ✦</div>
     <h1><span class="sw">⚔</span> Swords <span class="sw">⚔</span></h1>
-    <p>Recite the verse from memory, or look it up in your Bible — then flip the card to check. New King James Version.</p>
+    <p>Race to say the verse first. Flip the card to check. New King James Version.</p>
   </header>
 
   <!-- SETUP -->
@@ -170,7 +170,7 @@
         <div class="names" id="nameFields"></div>
       </div>
       <div class="field">
-        <label>Cards per player</label>
+        <label>Cards in the match</label>
         <div class="seg" id="roundSeg">
           <button type="button" data-r="3">3</button>
           <button type="button" data-r="5" class="sel">5</button>
@@ -198,7 +198,7 @@
         <div class="face front">
           <div class="kicker">Recite it…</div>
           <div class="bigref" id="cardRef"></div>
-          <div class="hint">Say it from memory, or find it in your Bible —<br>then flip the card to check.</div>
+          <div class="hint">First to say it wins the round —<br>flip the card to check.</div>
         </div>
         <div class="face back">
           <div class="kicker">New King James Version</div>
@@ -207,17 +207,13 @@
         </div>
       </div>
     </div>
-    <div class="tapflip" id="tapflip">tap the card or press space to flip</div>
+    <div class="tapflip" id="tapflip">tap the card or press space to flip it back and forth</div>
     <div class="scorepanel" id="scorepanel">
-      <div class="q" id="scoreQ"></div>
-      <div class="sbtns">
-        <button type="button" class="good" id="btnGood">Nailed it · +10</button>
-        <button type="button" class="close" id="btnClose">Close · +5</button>
-        <button type="button" class="miss" id="btnMiss">Miss · +0</button>
-      </div>
-      <button type="button" class="ghost" id="skipBtn">Skip card · no points</button>
+      <div class="q">Who read it first?</div>
+      <div class="sbtns" id="winBtns"></div>
+      <button type="button" class="ghost" id="skipBtn">No winner · next card</button>
     </div>
-    <div class="keys">space = flip · 1 = +10 · 2 = +5 · 3 = +0</div>
+    <div class="keys">space = flip · number keys = race winner</div>
   </section>
 
   <!-- RESULTS -->
@@ -276,7 +272,7 @@
   function flash(msg){ var f=$("flash"); f.textContent=msg; f.classList.add("on"); clearTimeout(flashT); flashT=setTimeout(function(){f.classList.remove("on");},1200); }
 
   /* ---------- setup state ---------- */
-  var playerCount=2, cardsPerPlayer=5;
+  var playerCount=2, matchCards=5;
   function renderNames(){
     var box=$("nameFields"); box.innerHTML="";
     for(var i=1;i<=playerCount;i++){
@@ -289,7 +285,7 @@
   $("pPlus").addEventListener("click",function(){ if(playerCount<8){playerCount++; $("pCount").textContent=playerCount; renderNames();} });
   $("roundSeg").addEventListener("click",function(e){
     var b=e.target.closest("button"); if(!b) return;
-    cardsPerPlayer=parseInt(b.dataset.r,10);
+    matchCards=parseInt(b.dataset.r,10);
     Array.prototype.forEach.call($("roundSeg").children,function(x){x.classList.toggle("sel",x===b);});
   });
   var themes=[...new Set(VERSES.map(function(v){return v.t;}))].sort();
@@ -337,15 +333,15 @@
   }
 
   /* ---------- game state ---------- */
-  var players=[], deck=[], idx=0, flipped=false, totalCards=0;
+  var players=[], deck=[], idx=0, flipped=false, everFlipped=false, totalCards=0;
 
   function playerName(i){ return players[i].name || ("Player "+(i+1)); }
 
-  function renderScorebar(active){
+  function renderScorebar(){
     var bar=$("scorebar"); bar.innerHTML="";
     players.forEach(function(p,i){
       var c=document.createElement("div");
-      c.className="chip"+(i===active?" active":"");
+      c.className="chip";
       c.innerHTML="<span></span><b></b>";
       c.firstChild.textContent=playerName(i);
       c.lastChild.textContent=p.score;
@@ -353,10 +349,8 @@
     });
   }
 
-  function currentPlayer(){ return idx % players.length; }
-
   function dealCard(){
-    flipped=false;
+    flipped=false; everFlipped=false;
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
     var v=deck[idx];
     $("card3d").classList.remove("flipped");
@@ -365,10 +359,9 @@
     $("cardRef").textContent=v.r;
     $("cardText").textContent="Loading NKJV text…";
     $("cardVerseRef").innerHTML="";
-    var cp=currentPlayer();
-    renderScorebar(cp);
+    renderScorebar();
     $("progress").textContent="Card "+(idx+1)+" of "+totalCards;
-    $("turnnote").textContent=playerName(cp)+" — recite it, then flip.";
+    $("turnnote").textContent="Race — first to say it wins the round.";
     // prefetch this card + the next one
     fetchVerseText(v).then(function(t){
       if(deck[idx]===v){ $("cardText").textContent=t; $("cardVerseRef").innerHTML="<strong>"+v.r+"</strong> · NKJV"; }
@@ -385,20 +378,31 @@
   }
 
   function flip(){
-    if(flipped) return;
-    flipped=true;
-    $("card3d").classList.add("flipped");
-    $("tapflip").style.visibility="hidden";
-    var v=deck[idx], cp=currentPlayer();
-    $("scoreQ").textContent="How did "+playerName(cp)+" do on "+v.r+"?";
-    $("scorepanel").classList.add("on");
+    flipped=!flipped;
+    $("card3d").classList.toggle("flipped",flipped);
+    if(flipped && !everFlipped){
+      everFlipped=true;
+      buildWinButtons();
+      $("scorepanel").classList.add("on");
+      $("tapflip").style.visibility="hidden";
+    }
   }
 
-  function award(pts){
-    if(!flipped) return;
-    var cp=currentPlayer();
-    players[cp].score+=pts;
-    flash(playerName(cp)+" +"+pts);
+  function buildWinButtons(){
+    var box=$("winBtns"); box.innerHTML="";
+    players.forEach(function(p,i){
+      var b=document.createElement("button");
+      b.type="button"; b.className="good";
+      b.textContent=playerName(i)+" · +10";
+      b.addEventListener("click",function(){ award(i); });
+      box.appendChild(b);
+    });
+  }
+
+  function award(i){
+    if(!everFlipped) return;
+    players[i].score+=10;
+    flash(playerName(i)+" +10");
     idx++;
     if(idx>=deck.length){ setTimeout(showResults,700); }
     else { setTimeout(dealCard,450); }
@@ -406,11 +410,8 @@
 
   $("cardscene").addEventListener("click",flip);
   $("cardscene").addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } });
-  $("btnGood").addEventListener("click",function(){award(10);});
-  $("btnClose").addEventListener("click",function(){award(5);});
-  $("btnMiss").addEventListener("click",function(){award(0);});
   $("skipBtn").addEventListener("click",function(){
-    if(!flipped) return;
+    if(!everFlipped) return;
     idx++;
     if(idx>=deck.length) showResults(); else dealCard();
   });
@@ -418,9 +419,10 @@
     if(!$("gameScreen").classList.contains("on")) return;
     if($("settingsModal").classList.contains("on")) return;
     if(e.key===" "){ e.preventDefault(); flip(); }
-    else if(e.key==="1"){ award(10); }
-    else if(e.key==="2"){ award(5); }
-    else if(e.key==="3"){ award(0); }
+    else if(e.key>="1" && e.key<="8"){
+      var n=parseInt(e.key,10)-1;
+      if(n<players.length) award(n);
+    }
   });
 
   function showResults(){
@@ -459,7 +461,7 @@
     var theme=$("themeSel").value;
     var pool=VERSES.filter(function(v){return !theme||v.t===theme;});
     if(!pool.length){ flash("No verses in that theme."); return; }
-    totalCards=Math.min(cardsPerPlayer*players.length, pool.length);
+    totalCards=Math.min(matchCards, pool.length);
     deck=shuffle(pool.slice()).slice(0,totalCards);
     idx=0;
     show("gameScreen");
