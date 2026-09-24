@@ -170,12 +170,28 @@
         <div class="names" id="nameFields"></div>
       </div>
       <div class="field">
+        <label>Match ends</label>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-m="cards" class="sel">Fixed cards</button>
+          <button type="button" data-m="points">Points race</button>
+        </div>
+      </div>
+      <div class="field" id="cardsField">
         <label>Cards in the match</label>
         <div class="seg" id="roundSeg">
           <button type="button" data-r="3">3</button>
           <button type="button" data-r="5" class="sel">5</button>
           <button type="button" data-r="8">8</button>
           <button type="button" data-r="10">10</button>
+        </div>
+      </div>
+      <div class="field" id="pointsField" style="display:none">
+        <label>First to</label>
+        <div class="seg" id="pointsSeg">
+          <button type="button" data-p="50">50</button>
+          <button type="button" data-p="100" class="sel">100</button>
+          <button type="button" data-p="150">150</button>
+          <button type="button" data-p="200">200</button>
         </div>
       </div>
       <div class="field">
@@ -272,7 +288,7 @@
   function flash(msg){ var f=$("flash"); f.textContent=msg; f.classList.add("on"); clearTimeout(flashT); flashT=setTimeout(function(){f.classList.remove("on");},1200); }
 
   /* ---------- setup state ---------- */
-  var playerCount=2, matchCards=5;
+  var playerCount=2, matchCards=5, endMode="cards", pointTarget=100;
   function renderNames(){
     var box=$("nameFields"); box.innerHTML="";
     for(var i=1;i<=playerCount;i++){
@@ -287,6 +303,18 @@
     var b=e.target.closest("button"); if(!b) return;
     matchCards=parseInt(b.dataset.r,10);
     Array.prototype.forEach.call($("roundSeg").children,function(x){x.classList.toggle("sel",x===b);});
+  });
+  $("modeSeg").addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    endMode=b.dataset.m;
+    Array.prototype.forEach.call($("modeSeg").children,function(x){x.classList.toggle("sel",x===b);});
+    $("cardsField").style.display=endMode==="cards"?"":"none";
+    $("pointsField").style.display=endMode==="points"?"":"none";
+  });
+  $("pointsSeg").addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    pointTarget=parseInt(b.dataset.p,10);
+    Array.prototype.forEach.call($("pointsSeg").children,function(x){x.classList.toggle("sel",x===b);});
   });
   var themes=[...new Set(VERSES.map(function(v){return v.t;}))].sort();
   themes.forEach(function(t){ var o=document.createElement("option"); o.value=t; o.textContent=t; $("themeSel").appendChild(o); });
@@ -333,7 +361,7 @@
   }
 
   /* ---------- game state ---------- */
-  var players=[], deck=[], idx=0, flipped=false, everFlipped=false, totalCards=0;
+  var players=[], deck=[], idx=0, flipped=false, everFlipped=false, totalCards=0, cardsPlayed=0;
 
   function playerName(i){ return players[i].name || ("Player "+(i+1)); }
 
@@ -350,6 +378,7 @@
   }
 
   function dealCard(){
+    if(endMode==="points" && idx>=deck.length){ deck=shuffle(deck); idx=0; }
     flipped=false; everFlipped=false;
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
     var v=deck[idx];
@@ -360,7 +389,9 @@
     $("cardText").textContent="Loading NKJV text…";
     $("cardVerseRef").innerHTML="";
     renderScorebar();
-    $("progress").textContent="Card "+(idx+1)+" of "+totalCards;
+    $("progress").textContent = endMode==="cards"
+      ? "Card "+(idx+1)+" of "+totalCards
+      : "First to "+pointTarget+" · card "+(cardsPlayed+1);
     $("turnnote").textContent="Race — first to say it wins the round.";
     // prefetch this card + the next one
     fetchVerseText(v).then(function(t){
@@ -402,9 +433,11 @@
   function award(i){
     if(!everFlipped) return;
     players[i].score+=10;
+    cardsPlayed++;
     flash(playerName(i)+" +10");
+    if(endMode==="points" && players[i].score>=pointTarget){ setTimeout(showResults,700); return; }
     idx++;
-    if(idx>=deck.length){ setTimeout(showResults,700); }
+    if(endMode==="cards" && idx>=deck.length){ setTimeout(showResults,700); }
     else { setTimeout(dealCard,450); }
   }
 
@@ -412,8 +445,9 @@
   $("cardscene").addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } });
   $("skipBtn").addEventListener("click",function(){
     if(!everFlipped) return;
+    cardsPlayed++;
     idx++;
-    if(idx>=deck.length) showResults(); else dealCard();
+    if(endMode==="cards" && idx>=deck.length) showResults(); else dealCard();
   });
   document.addEventListener("keydown",function(e){
     if(!$("gameScreen").classList.contains("on")) return;
@@ -432,7 +466,9 @@
     $("winnerLine").textContent = winners.length>1
       ? "It's a tie!"
       : "🏆 "+winners[0].name+" wins!";
-    $("resultsSub").textContent = totalCards+" cards · "+players.length+(players.length===1?" player":" players");
+    $("resultsSub").textContent = endMode==="points"
+      ? "First to "+pointTarget+" · "+cardsPlayed+" cards · "+players.length+(players.length===1?" player":" players")
+      : totalCards+" cards · "+players.length+(players.length===1?" player":" players");
     var ul=$("resultsList"); ul.innerHTML="";
     order.forEach(function(o,k){
       var li=document.createElement("li");
@@ -447,7 +483,8 @@
 
   $("againBtn").addEventListener("click",function(){
     players.forEach(function(p){p.score=0;});
-    deck=shuffle(deck.slice()); idx=0; totalCards=deck.length;
+    deck=shuffle(deck.slice()); idx=0; cardsPlayed=0;
+    if(endMode==="cards") totalCards=deck.length;
     show("gameScreen"); dealCard();
   });
   $("newBtn").addEventListener("click",function(){ show("setupScreen"); });
@@ -462,8 +499,9 @@
     var pool=VERSES.filter(function(v){return !theme||v.t===theme;});
     if(!pool.length){ flash("No verses in that theme."); return; }
     totalCards=Math.min(matchCards, pool.length);
-    deck=shuffle(pool.slice()).slice(0,totalCards);
-    idx=0;
+    deck=shuffle(pool.slice());
+    if(endMode==="cards") deck=deck.slice(0,totalCards);
+    idx=0; cardsPlayed=0;
     show("gameScreen");
     dealCard();
   });
